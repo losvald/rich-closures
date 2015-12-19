@@ -6,12 +6,12 @@ object SerializationUtil {
   trait RichClosure {
     type Function
     val f: Function
-    val freeRefs: List[Any]
+    val freeRefVals: List[Any]
   }
 
   // case class RichClosure1[-T, +R](
   //   val f: ???, // TODO(med-prio) how to let f have type <: Function1[T, R]?
-  //   val freeRefs: List[Any])
+  //   val freeRefVals: List[Any])
   trait RichClosure1[-T, +R]
       extends (T => R) with RichClosure {
     type Function <: Function1[T, R]
@@ -24,12 +24,16 @@ object SerializationUtil {
     val fullNames = ts.map(_ match {
       // case ident: Ref => ident.symbol.fullName // this is too specific
       case ref @ RefTree(qual, _) if qual.isTerm => ref.symbol.fullName
+      case Block(_, Function(_, Apply(ident @ Ident(_), _))) =>
+        ident.symbol.fullName
       case t =>
         // val t = t.find { _ match { case Ident(
         c.abort(c.enclosingPosition, "not (selection of) ident.: " + showRaw(t))
     })
     q"""List(..$fullNames)"""
   }
+
+  def mkFreeRefsUnsafe(fullNames: String*): List[String] = fullNames.toList
 
   // Macro for extracting unbound names of a rich closure
   def freeRefNames(rc: RichClosure): List[String] = macro freeRefNamesImpl
@@ -38,7 +42,7 @@ object SerializationUtil {
     // TODO(hi-prio) if we store trees / symbols from blackbox.Universe#Context,
     // would it be possible to extract anything from them in a whitebox context?
     // q"""$rc.freeSyms.map(_.fullName)"""
-    q"$rc.freeRefs"
+    q"$rc.freeRefVals"
   }
 
   def fun0[R](body: => R): () => R = macro fun0Impl[R]
@@ -84,7 +88,7 @@ object SerializationUtil {
       new RichClosure1[$tpeT, $tpeR] {
         override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
-        override val freeRefs = $freeRefs
+        override val freeRefVals = $freeRefs
       }""")
   }
 
@@ -114,4 +118,10 @@ object SerializationUtil {
     "cv.debug", "true").toBoolean // TODO(low-prio) change default to false
   def debugln(msg: => String): Unit =
     if (isDebugEnabled) println(msg)
+
+  object TestOnly {
+    implicit class DebuggableRichClosure(rc: RichClosure) {
+      val freeRefs = rc.freeRefVals.asInstanceOf[List[String]].sorted
+    }
+  }
 }

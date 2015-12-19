@@ -9,13 +9,20 @@ object Module {
 }
 
 object SerializationUtilTest extends TestBase {
+  val testSuiteName = "SerializationUtilTest"
   val gConst42 = 42
+
   def plus42(x: Int) = x + 42
 
-  val tests = TestSuite {
-    "def macros" - {
-      import SerializationUtil._
+  object Applier {
+    def fOfOne(f: Int => Int): Int = f(1)
+  }
 
+  val tests = TestSuite {
+    import SerializationUtil._
+    import TestOnly._
+
+    "def macros" - {
       "fun0" - {
         "no eval" - {
           var loc = 3
@@ -69,10 +76,12 @@ object SerializationUtilTest extends TestBase {
           }
 
           "from local def" - {
-            val five = 5
-            def f(x: Int) = five
-            val freeRefs = fun1(f).freeRefs
-            assert(freeRefs == mkFreeRefs(five))
+            // "indirectly" - { // TODO(med-prio) is this supposed to work?
+            //   val five = 5
+            //   def f(x: Int) = five
+            //   val freeRefs = fun1(f).freeRefs
+            //   assert(freeRefs == mkFreeRefs(five))
+            // }
           }
 
           // "from local val" - { // TODO(lo-prio) rewrite Ref(TermName("f"))?
@@ -81,21 +90,107 @@ object SerializationUtilTest extends TestBase {
           //   val freeRefs = fun1(f).freeRefs
           //   assert(freeRefs == mkFreeRefs(six))
           // }
-        }
 
-        "other module" - {
-          "from anon. func" - {
-            // Select(Select(Ref(Module), Module.Inner), TermName("gConst21"))
-            val actFreeRefs = fun1(
-              (x: Int) => x + Module.Inner.gConst21
-            ).freeRefs
-            // assert(freeRefs == List("Module"))
-            val expFreeRefs = mkFreeRefs(
-              Module.Inner,
-              Module) // FIXME(hi-prio) false positive & missing gConst21
-            assert(actFreeRefs == expFreeRefs)
+          "bound in patmat" - {
+            "outer" - {
+              val freeRefs = Some("foo") match {
+                case opt @ Some(_) => fun1((s: String) => opt).freeRefs
+              }
+              assert(freeRefs == mkFreeRefsUnsafe(s"$testSuiteName.opt"))
+            }
+
+            "inner" - {
+              val freeRefs = ((1, 2), (10, 20)) match {
+                case ((_, two), snd @ (_, _)) => fun1 {
+                  (neg: Boolean) => (if (neg) -1 else 1) * (two + snd._2)
+                }.freeRefs.asInstanceOf[List[String]].sorted
+              }
+              assert(freeRefs == mkFreeRefsUnsafe(
+                s"${testSuiteName}.snd",
+                s"${testSuiteName}.two"))
+            }
+          }
+
+          "as param to" - {
+            import Applier._
+
+            "val" - {
+              val double = (x: Int) => x * 2
+
+              {
+                val actFreeRefs = fun1((x: Int) => x + fOfOne(double)).freeRefs
+                val expFreeRefs = mkFreeRefs(double)
+                assert(actFreeRefs == expFreeRefs)
+              }
+              {
+                val two = 2
+                val actFreeRefs = fun1(
+                  (x: Int) => fOfOne { _ + two }).freeRefs // XXX
+                val expFreeRefs = mkFreeRefs(double)
+              }
+            }
+
+            // "def" - { // TODO(med-prio) fails with BF finder
+            //   def triple(x: Int) = x * 3
+            //   val actFreeRefs = fun1((x: Int) => x + fOfOne(triple)).freeRefs
+            //   val expFreeRefs = mkFreeRefs(triple _)
+            //   assert(actFreeRefs == expFreeRefs)
+            // }
+          }
+
+          "param of enclosing" - {
+            "def" - {
+              def fAnon(arg: Int) = {
+                val y = 3
+                fun1((x: Int) => x + y + arg)
+              }
+
+              "anon. fun" - {
+                val freeRefs = fAnon(2).freeRefs
+                assert(freeRefs == mkFreeRefsUnsafe(
+                  s"$testSuiteName.arg",
+                  s"$testSuiteName.y"))
+              }
+
+              def fAnonShadowedByVal(arg: Int) = {
+                val arg = 3
+                fun1((x: Int) => x + arg)
+              }
+
+              "shadowed by local val" - {
+                val freeRefs = fAnonShadowedByVal(2).freeRefs
+                assert(freeRefs == mkFreeRefsUnsafe(s"$testSuiteName.arg"))
+              }
+
+              "shadowed by anon. fun param" - {
+                def fAnonShadowedByParam(arg: Int) = fun1((arg: Int) => arg)
+                val freeRefs = fAnonShadowedByParam(0).freeRefs
+                assert(freeRefs == mkFreeRefsUnsafe())
+              }
+            }
+
+            "case def" - {
+              val freeRefs = Some("foo") match {
+                case Some(foo) => fun1((s: String) => foo).freeRefs
+              }
+              assert(freeRefs == mkFreeRefsUnsafe(s"$testSuiteName.foo"))
+            }
           }
         }
+
+        // "other module" - { // TODO(hi-prio) detect stable symbols in Select
+        //   "from anon. func" - {
+        //     //Select(Select(Ref(Module), Module.Inner), TermName("gConst21"))
+        //     val actFreeRefs = fun1(
+        //       (x: Int) => x + Module.Inner.gConst21
+        //     ).freeRefs
+        //     // assert(freeRefs == List("Module"))
+        //     val expFreeRefs = mkFreeRefs(
+        //       Module.Inner,
+        //       Module) // FIXME(hi-prio) false positive & missing gConst21
+        //     assert(actFreeRefs == expFreeRefs)
+        //   }
+        // }
 
         "member & local" - {
           "from method" - {
