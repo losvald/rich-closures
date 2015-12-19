@@ -80,15 +80,18 @@ object SerializationUtil {
       case _ =>
         c.abort(c.enclosingPosition, "unexpected AST: " + showRaw(f))
     }
-    val freeSyms = findFreeRefs(c)(f.tree, boundSyms)
-    val freeRefs = freeSyms.map(_.fullName)
+    lazy val freeSyms = findFreeRefs(c)(f.tree, boundSyms)
+    lazy val freeRefs = freeSyms.map(_.fullName)
+    lazy val freeRefsBF = FreeVarsBruteForceFinder.locals(c)(f.tree).map {
+      _._1.symbol.fullName
+    }
 
     val (tpeT, tpeR) = (c.weakTypeOf[T], c.weakTypeOf[R])
     c.Expr[c.prefix.value.RichClosure1[T, R]](q"""
       new RichClosure1[$tpeT, $tpeR] {
         override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
-        override val freeRefVals = $freeRefs
+        override val freeRefVals = $freeRefsBF
       }""")
   }
 
