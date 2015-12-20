@@ -59,6 +59,24 @@ object SerializationUtilTest extends TestBase {
             val freeRefs = fun1(get43).freeRefs
             assert(freeRefs == mkFreeRefs())
           }
+
+          "structural refinement" - {
+            "field" - {
+              val freeRefs = fun1((x: { val y: Int }) => x.y).freeRefs
+              assert(freeRefs == mkFreeRefs())
+            }
+            "instance" - {
+              val freeRefs = fun1((z: { val w: Int }) => z).freeRefs
+              assert(freeRefs == mkFreeRefs())
+            }
+            "in call" - {
+              val freeRefs = fun1((x: Int) => {
+                def foo(bar: { val baz: String }) = bar.baz
+                new { val baz = "baz" }
+              }).freeRefs
+              assert(freeRefs == mkFreeRefs())
+            }
+          }
         }
 
         "local only" - {
