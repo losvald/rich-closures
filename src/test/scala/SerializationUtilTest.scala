@@ -228,6 +228,15 @@ object SerializationUtilTest extends TestBase {
             }
           }
 
+          "in case guard" - {
+            val allowSome = true
+            val freeRefs = fun1((_: Option[Int]) match {
+              case Some(n) if allowSome => 1
+              case _ => 0
+            }).freeRefs
+            assert(freeRefs == mkFreeRefs(allowSome))
+          }
+
           "as param to" - {
             import Applier._
 
