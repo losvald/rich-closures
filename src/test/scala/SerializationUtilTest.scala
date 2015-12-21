@@ -77,6 +77,39 @@ object SerializationUtilTest extends TestBase {
               assert(freeRefs == mkFreeRefs())
             }
           }
+
+          "type" - {
+            "ident" - {
+              type LocalInt = Int
+              val freeRefs = fun1((z: LocalInt) =>
+                1.asInstanceOf[LocalInt]).freeRefs
+              assert(freeRefs == mkFreeRefs())
+            }
+
+            "select" - {
+              trait Trait {
+                type LocalAny = Any
+              }
+              class Clazz[T <: Trait#LocalAny] {
+                type LocalT = T
+                type LocalString = String
+              }
+
+              var freeRefs = fun1((s: Clazz[Int]#LocalString) => {
+                type ClazzStr = Clazz[String]
+                type MyStr = ClazzStr#LocalT
+                s.asInstanceOf[MyStr] + s.asInstanceOf[Trait#LocalAny]
+              }).freeRefs
+              assert(freeRefs == mkFreeRefs())
+
+              // Verify no false positive due to selection of:
+              // - Literal(Constant("foo"))
+              // - path-dependant type c.type#LocalT
+              freeRefs = fun1((c: Clazz[String]) =>
+                "foo".asInstanceOf[c.type#LocalT]).freeRefs
+              assert(freeRefs == mkFreeRefs())
+            }
+          }
         }
 
         "local only" - {
