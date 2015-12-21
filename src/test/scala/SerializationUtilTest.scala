@@ -1,5 +1,22 @@
 import utest._
 
+package pkg {
+  object Module {
+    type Str = String
+    val gBar = "bar"
+  }
+}
+
+package object pkgobj {
+  type GlobStr = String
+  val gFoo = "foo"
+
+  object Module {
+    type Str = String
+    val gBaz = "baz"
+  }
+}
+
 object Module {
   val gConst42 = 42
 
@@ -46,9 +63,11 @@ object SerializationUtilTest extends TestBase {
         }
 
         "none" - {
+          val noRefs = mkFreeRefs()
+
           "from global method" - {
             val freeRefs = fun1(plus42).freeRefs
-            assert(freeRefs == mkFreeRefs())
+            assert(freeRefs == noRefs)
           }
 
           "from higher-order method" - {
@@ -57,24 +76,24 @@ object SerializationUtilTest extends TestBase {
               plus42(one)
             }
             val freeRefs = fun1(get43).freeRefs
-            assert(freeRefs == mkFreeRefs())
+            assert(freeRefs == noRefs)
           }
 
           "structural refinement" - {
             "field" - {
               val freeRefs = fun1((x: { val y: Int }) => x.y).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
             }
             "instance" - {
               val freeRefs = fun1((z: { val w: Int }) => z).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
             }
             "in call" - {
               val freeRefs = fun1((x: Int) => {
                 def foo(bar: { val baz: String }) = bar.baz
                 new { val baz = "baz" }
               }).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
             }
           }
 
@@ -83,7 +102,7 @@ object SerializationUtilTest extends TestBase {
               type LocalInt = Int
               val freeRefs = fun1((z: LocalInt) =>
                 1.asInstanceOf[LocalInt]).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
             }
 
             "select" - {
@@ -100,14 +119,41 @@ object SerializationUtilTest extends TestBase {
                 type MyStr = ClazzStr#LocalT
                 s.asInstanceOf[MyStr] + s.asInstanceOf[Trait#LocalAny]
               }).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
 
               // Verify no false positive due to selection of:
               // - Literal(Constant("foo"))
               // - path-dependant type c.type#LocalT
               freeRefs = fun1((c: Clazz[String]) =>
                 "foo".asInstanceOf[c.type#LocalT]).freeRefs
-              assert(freeRefs == mkFreeRefs())
+              assert(freeRefs == noRefs)
+            }
+          }
+
+          "package" - {
+            val freeRefs = fun1((s: String) => {
+              type Str = pkg.Module.type#Str
+              s.asInstanceOf[pkgobj.GlobStr]
+            }).freeRefs
+            assert(freeRefs == noRefs)
+          }
+
+          "import" - {
+            "wildcard" - {
+              val freeRefs = fun1((s: String) => {
+                import pkg._
+                import pkgobj._
+                s
+              }).freeRefs
+              assert(freeRefs == noRefs)
+            }
+
+            "import specific" - {
+              val freeRefs = fun1((s: String) => {
+                import pkgobj.gFoo
+                s
+              }).freeRefs
+              assert(freeRefs == noRefs)
             }
           }
         }
