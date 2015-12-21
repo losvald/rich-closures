@@ -79,6 +79,11 @@ object SerializationUtilTest extends TestBase {
             assert(freeRefs == noRefs)
           }
 
+          "placeholder param" - {
+            val freeRefs = fun1((_: Int) + 3).freeRefs
+            assert(freeRefs == noRefs)
+          }
+
           "structural refinement" - {
             "field" - {
               val freeRefs = fun1((x: { val y: Int }) => x.y).freeRefs
@@ -171,6 +176,21 @@ object SerializationUtilTest extends TestBase {
             val freeRefs = fun1((x: Int) => five).freeRefs
             assert(freeRefs == mkFreeRefs(five))
           }
+
+          // "placeholder param" - { // TODO(hi-prio) expected behavior?
+          //   "anon" - {
+          //     val Some(freeRefs) = Some(
+          //       fun1 { (x: Int) => -x }
+          //     ) map { fun1(_).freeRefs }
+          //     assert(freeRefs.nonEmpty)
+          //   }
+          //
+          //   "named" - {
+          //     val f1 = fun1 { (x: Int) => -x }
+          //     val Some(freeRefs) = Some(f1) map { fun1(_).freeRefs }
+          //     assert(freeRefs == mkFreeRefs(f1))
+          //   }
+          // }
 
           "from local def" - {
             // "indirectly" - { // TODO(med-prio) is this supposed to work?
