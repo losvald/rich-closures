@@ -84,6 +84,18 @@ object SerializationUtilTest extends TestBase {
             assert(freeRefs == noRefs)
           }
 
+          // "patmat bound & param" - { // TODO(med-prio) fails with BF finder
+          //   val freeRefs = fun1((pair: Option[((Int, Int), Int)]) => {
+          //     pair match {
+          //       case _ @ None => 0
+          //       case some @ Some(((_, fstSnd), snd @ _)) if fstSnd != 0 =>
+          //         some.get._1._1 + fstSnd + snd
+          //       case _ => pair.get._2
+          //     }
+          //   }).freeRefs
+          //   assert(freeRefs == noRefs)
+          // }
+
           "structural refinement" - {
             "field" - {
               val freeRefs = fun1((x: { val y: Int }) => x.y).freeRefs
@@ -225,6 +237,27 @@ object SerializationUtilTest extends TestBase {
               assert(freeRefs == mkFreeRefsUnsafe(
                 s"${testSuiteName}.snd",
                 s"${testSuiteName}.two"))
+            }
+          }
+
+          "false shadowing" - {
+            "patmat" - {
+              val n = 42
+              val some = Some(0)
+              val freeRefs = fun1((x: Int) => (None, Some(5)) match {
+                case (None, some @ Some(n)) => 1
+                case _ => some.get + n
+              }).freeRefs
+              assert(freeRefs == mkFreeRefs(n, some))
+            }
+
+            "def param" - {
+              val local = 123
+              val freeRefs = fun1((x: Int) => {
+                def getLocal(local: String) = local
+                local
+              }).freeRefs
+              assert(freeRefs == mkFreeRefs(local))
             }
           }
 
