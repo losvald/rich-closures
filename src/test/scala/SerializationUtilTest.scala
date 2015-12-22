@@ -65,6 +65,22 @@ object SerializationUtilTest extends TestBase {
         "none" - {
           val noRefs = mkFreeRefs()
 
+          "val scope" - {
+            val freeRefs = fun1((ignored: Unit) => {
+              val lvl0 = 0
+              val ret = {
+                val lvl1 = 1
+                val nested = {
+                  val lvl2 = lvl0 + lvl1
+                  lvl2
+                }
+                nested + lvl0
+              }
+              ret
+            }).freeRefs
+            assert(freeRefs == noRefs)
+          }
+
           "from global method" - {
             val freeRefs = fun1(plus42).freeRefs
             assert(freeRefs == noRefs)
@@ -258,6 +274,20 @@ object SerializationUtilTest extends TestBase {
                 local
               }).freeRefs
               assert(freeRefs == mkFreeRefs(local))
+            }
+
+            "val scope" - {
+              val s = "outer"
+              val f1 = fun1((x: Int) => {
+                val inner = {
+                  val s = "in"
+                  "inner"
+                }
+                s + ", not " + inner
+              })
+              assert(f1(0) == "outer, not inner") // sanity check
+              val freeRefs = f1.freeRefs
+              assert(freeRefs == mkFreeRefs(s))
             }
           }
 
