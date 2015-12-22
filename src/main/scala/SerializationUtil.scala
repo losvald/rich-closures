@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2015 Leo Osvald (leo.osvald@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
 import scala.reflect.macros.whitebox.{Context => WContext}
@@ -83,7 +99,7 @@ object SerializationUtil {
 
   def findFreeRefs(c: Context)(
     tree: c.universe.Tree
-  ): List[c.universe.TermSymbol] = {
+  ): List[c.universe.Symbol] = {
     import c.universe._
     // def isFree(sym: TermSymbol) = sym.isInstanceOf[FreeTermSymbolApi]
 
@@ -110,7 +126,7 @@ object SerializationUtil {
           !select.symbol.asTerm.isStable =>
         val sym = select.symbol.asTerm
         debugln(s"unstable static: ${showRaw(select)}")
-        select.symbol.asTerm // TODO(hi-prio) catch ref's symbol instead?
+        ref.symbol
     } filter { s =>
       // Note: we cannot filter out if s.isMethod == true because member val
       // have explicit setters or getters
@@ -129,9 +145,8 @@ object SerializationUtil {
     }
 
     tree.collect {
-      case defn @ (DefDef(_, _, _, _, _, _) | ValDef(_, _, _, _)) =>
-        defn.symbol.asTerm
-      case bind @ Bind(name, body) => bind.symbol.asTerm
+      case defn @ (DefDef(_, _, _, _, _, _) | ValDef(_, _, _, _)) => defn.symbol
+      case bind @ Bind(name, body) => bind.symbol
     }
   }
 

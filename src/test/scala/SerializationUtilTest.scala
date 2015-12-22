@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2015 Leo Osvald (leo.osvald@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import utest._
 
 package pkg {
@@ -400,18 +416,18 @@ object SerializationUtilTest extends TestBase {
           "method" - {
             "direct" - {
               val freeRefs = fun1(plus42).freeRefs
-              assert(freeRefs == mkFreeRefs(plus42 _))
+              assert(freeRefs == mkFreeRefs(SerializationUtilTest))
             }
-          //   "indirect" - { // FIXME(hi-prio) missed either plus42 or This?
-          //     val freeRefs = fun1((u: Unit) => {
-          //       def get43(ignored: Int) = {
-          //         val one = 1 // try to confuse the macro
-          //         plus42(one)
-          //       }
-          //       get43(0)
-          //     }).freeRefs
-          //     assert(freeRefs == mkFreeRefs(plus42Name))
-          //   }
+            "indirect" - {
+              val freeRefs = fun1((u: Unit) => {
+                def get43(ignored: Int) = {
+                  val one = 1 // try to confuse the macro
+                  plus42(one)
+                }
+                get43(0)
+              }).freeRefs
+              assert(freeRefs == mkFreeRefs(SerializationUtilTest))
+            }
           }
 
           "val" - {
