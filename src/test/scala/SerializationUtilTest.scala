@@ -106,13 +106,11 @@ object SerializationUtilTest extends TestBase {
             }
           }
 
-          "from higher-order method" - {
-            def get43(ignored: Int) = {
-              val one = 1 // try to confuse the macro
-              plus42(one)
-            }
-            val freeRefs = fun1(get43).freeRefs
+          "higher-order anon. function" - {
+            var freeRefs = fun1((f: Int => String) => 42).freeRefs
             assert(freeRefs == noRefs)
+            // TODO(med-prio) figure out why the following doesn't compile
+            // assert(fun1((f: Int => String) => 42).freeRefs.isEmpty)
           }
 
           "placeholder param" - {
@@ -120,17 +118,17 @@ object SerializationUtilTest extends TestBase {
             assert(freeRefs == noRefs)
           }
 
-          // "patmat bound & param" - { // TODO(med-prio) fails with BF finder
-          //   val freeRefs = fun1((pair: Option[((Int, Int), Int)]) => {
-          //     pair match {
-          //       case _ @ None => 0
-          //       case some @ Some(((_, fstSnd), snd @ _)) if fstSnd != 0 =>
-          //         some.get._1._1 + fstSnd + snd
-          //       case _ => pair.get._2
-          //     }
-          //   }).freeRefs
-          //   assert(freeRefs == noRefs)
-          // }
+          "patmat bound & param" - { // TODO(med-prio) fails with BF finder
+            val freeRefs = fun1((pair: Option[((Int, Int), Int)]) => {
+              pair match {
+                case _ @ None => 0
+                case some @ Some(((_, fstSnd), snd @ _)) if fstSnd != 0 =>
+                  some.get._1._1 + fstSnd + snd
+                case _ => pair.get._2
+              }
+            }).freeRefs
+            assert(freeRefs == noRefs)
+          }
 
           "structural refinement" - {
             "field" - {
@@ -387,40 +385,49 @@ object SerializationUtilTest extends TestBase {
           }
         }
 
-        // "other module" - { // TODO(hi-prio) detect stable symbols in Select
-        //   "from anon. func" - {
-        //     //Select(Select(Ref(Module), Module.Inner), TermName("gConst21"))
-        //     val actFreeRefs = fun1(
-        //       (x: Int) => x + Module.Inner.gConst21
-        //     ).freeRefs
-        //     // assert(freeRefs == List("Module"))
-        //     val expFreeRefs = mkFreeRefs(
-        //       Module.Inner,
-        //       Module) // FIXME(hi-prio) false positive & missing gConst21
-        //     assert(actFreeRefs == expFreeRefs)
-        //   }
-        // }
-
-        "member & local" - {
-          "from method" - {
-            val y = 1
-            def add42AndY(x: Int) = x + y + gConst42
-            fun1(add42AndY)
-            assert(add42AndY(23) == 66)
-            // TODO(hi-prio) more assertions
-          }
-          "from anon. closure" - {
-            val y = 1
-            val freeRefs = fun1 { (x: Int) => x + y + gConst42 }.freeRefs
-            assert(freeRefs == List("SerializationUtilTest.y"))
+        "other module" - { // TODO(hi-prio) detect stable symbols in Select
+          "from anon. func" - {
+            //Select(Select(Ref(Module), Module.Inner), TermName("gConst21"))
+            val actFreeRefs = fun1(
+              (x: Int) => x + Module.Inner.gConst21
+            ).freeRefs
+            val expFreeRefs = mkFreeRefs(Module.Inner.gConst21)
+            assert(actFreeRefs == expFreeRefs)
           }
         }
 
-        "higher-order anon. function" - {
-          var freeRefs = fun1((f: Int => String) => 42).freeRefs
-          assert(freeRefs == List())
-          // TODO(med-prio) figure out why the following doesn't compile
-          // assert(fun1((f: Int => String) => 42).freeRefs.isEmpty)
+        "member & local" - {
+          "method" - {
+            "direct" - {
+              val freeRefs = fun1(plus42).freeRefs
+              assert(freeRefs == mkFreeRefs(plus42 _))
+            }
+          //   "indirect" - { // FIXME(hi-prio) missed either plus42 or This?
+          //     val freeRefs = fun1((u: Unit) => {
+          //       def get43(ignored: Int) = {
+          //         val one = 1 // try to confuse the macro
+          //         plus42(one)
+          //       }
+          //       get43(0)
+          //     }).freeRefs
+          //     assert(freeRefs == mkFreeRefs(plus42Name))
+          //   }
+          }
+
+          "val" - {
+            "direct" - {
+              val y = 1
+              val freeRefs = fun1 { (x: Int) => x + y + gConst42 }.freeRefs
+              assert(freeRefs == mkFreeRefs(gConst42, y))
+            }
+            // "indirect" - { // FIXME(hi-prio) missing y and gConst42
+            //   val y = 1
+            //   def add42AndY(x: Int) = x + y + gConst42
+            //   assert(add42AndY(23) == 66) // sanity check
+            //   val freeRefs = fun1(add42AndY).freeRefs
+            //   assert(freeRefs == mkFreeRefs(add42AndY _, gConst42, y))
+            // }
+          }
         }
       }
     }

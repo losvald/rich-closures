@@ -24,8 +24,8 @@ object SerializationUtil {
     val fullNames = ts.map(_ match {
       // case ident: Ref => ident.symbol.fullName // this is too specific
       case ref @ RefTree(qual, _) if qual.isTerm => ref.symbol.fullName
-      case Block(_, Function(_, Apply(ident @ Ident(_), _))) =>
-        ident.symbol.fullName
+      case Block(_, Function(_, Apply(ref @ RefTree(_, _), _))) if ref.isTerm =>
+        ref.symbol.fullName
       case t =>
         // val t = t.find { _ match { case Ident(
         c.abort(c.enclosingPosition, "not (selection of) ident.: " + showRaw(t))
@@ -66,21 +66,7 @@ object SerializationUtil {
       pretty(any(f.tree)) + "\n" +
       "raw: " + showRaw(f))
 
-    def vparams2symbols(params: List[ValOrDefDef]) = params.map(_.symbol.asTerm)
-    val boundSyms = f.tree match {
-      case Function(vparams, body) =>
-        debugln("FUN1: " + f)
-        debugln("vparams: " + vparams)
-        debugln("vparams symbol names: " + vparams.map(p => (p.symbol, p.name)))
-        vparams2symbols(vparams)
-      case Block(trees, Function(vparams, body)) =>
-        // TODO(med-prio) consider trees in non-local var search
-        debugln("FUN1: " + f)
-        vparams2symbols(vparams)
-      case _ =>
-        c.abort(c.enclosingPosition, "unexpected AST: " + showRaw(f))
-    }
-    lazy val freeSyms = findFreeRefs(c)(f.tree, boundSyms)
+    lazy val freeSyms = findFreeRefs(c)(f.tree)
     lazy val freeRefs = freeSyms.map(_.fullName)
     lazy val freeRefsBF = FreeVarsBruteForceFinder.locals(c)(f.tree).map {
       _._1.symbol.fullName
@@ -91,28 +77,62 @@ object SerializationUtil {
       new RichClosure1[$tpeT, $tpeR] {
         override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
-        override val freeRefVals = $freeRefsBF
+        override val freeRefVals = $freeRefs
       }""")
   }
 
-  def findFreeRefs(c: Context)(tree: c.universe.Tree,
-    freeSyms: List[c.universe.TermSymbol]):
-      List[c.universe.TermSymbol] = {
+  def findFreeRefs(c: Context)(
+    tree: c.universe.Tree
+  ): List[c.universe.TermSymbol] = {
     import c.universe._
-    var idents = List[TermSymbol]()
-    var freeSymsSet = Set(freeSyms.toSeq: _*)
-    tree.collect {
-      case ref @ RefTree(qual, _) if qual.isTerm => ref.symbol.asTerm
-      // case ident @ Ident(name) if ident.isTerm => ident.symbol.asTerm
-    // } ++ tree.collect { case @Select(_, termName @ TermName(_)) => name
+    // def isFree(sym: TermSymbol) = sym.isInstanceOf[FreeTermSymbolApi]
+
+    val defSymSet = Set(findDefs(c)(tree): _*)
+    debugln(s"bound: ${defSymSet}")
+    val freeSyms = tree.collect {
+      // TODO(lo-prio) see if some cases can be consolidated as follows:
+      // 1) Collect (term) symbols from RefTree other than SelectFromTypeTree
+      // 2) case ref @ RefTree(qual, _) if ref.isTerm && ... => ...
+      case ident @ Ident(name)
+          if ident.isTerm && !ident.symbol.isModule &&
+          name != termNames.WILDCARD =>
+        debugln(s"ID'FIER: ${showRaw(ident)} #${ident##}")
+        ident.symbol.asTerm
+      case select @ Select(qual, TermName(name))
+          if select.isTerm && select.symbol.asTerm.isStable &&
+          select.symbol.asTerm.isStatic && // TODO(med-prio) too conservative?
+          !select.symbol.isModule =>
+        val sym = select.symbol.asTerm
+        debugln(s"SEL: ${showRaw(select)} name=$name meth=${sym.isMethod}")
+        sym
+      case select @ Select(ref @ (This(_) | Super(_)), _)
+          if select.isTerm && select.symbol.isStatic &&
+          !select.symbol.asTerm.isStable =>
+        val sym = select.symbol.asTerm
+        debugln(s"unstable static: ${showRaw(select)}")
+        select.symbol.asTerm // TODO(hi-prio) catch ref's symbol instead?
     } filter { s =>
-      !(s.isMethod || s.isPackage /* TODO(high-prio) ... */) &&
-      !freeSymsSet.contains(s)
+      // Note: we cannot filter out if s.isMethod == true because member val
+      // have explicit setters or getters
+      !(s.isPackage /* || TODO(high-prio) add more isXYZ? */) &&
+      !defSymSet.contains(s) // exclude bound symbols
+    } toSet // groupBy { s => s } map { _._1 } toList
+
+    freeSyms.toList
+  }
+
+  private def findDefs(c: Context)(tree: c.universe.Tree) = {
+    import c.universe._
+    tree match {
+      case Function(_, _) | Block(_, Function(_, _)) =>
+      case _ => c.abort(c.enclosingPosition, "unexpected AST: " + showRaw(tree))
     }
-    // new Traverser {
-    //   override def traverse(tree: Tree): Unit = tree match {
-    //     case ident @ Ident => TODO
-    // }
+
+    tree.collect {
+      case defn @ (DefDef(_, _, _, _, _, _) | ValDef(_, _, _, _)) =>
+        defn.symbol.asTerm
+      case bind @ Bind(name, body) => bind.symbol.asTerm
+    }
   }
 
   // private def findValDefs((implicit c: Context)
