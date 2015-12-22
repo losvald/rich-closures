@@ -65,6 +65,14 @@ object SerializationUtilTest extends TestBase {
         "none" - {
           val noRefs = mkFreeRefs()
 
+          "module alias" - {
+            object MyModule { }
+            val freeRefs = fun1((ignored: Unit) => {
+              val MyModuleAlias = MyModule
+            }).freeRefs
+            assert(freeRefs == noRefs)
+          }
+
           "val scope" - {
             val freeRefs = fun1((ignored: Unit) => {
               val lvl0 = 0
