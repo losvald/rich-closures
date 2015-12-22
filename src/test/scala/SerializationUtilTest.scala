@@ -122,11 +122,19 @@ object SerializationUtilTest extends TestBase {
             }
           }
 
-          "higher-order anon. function" - {
-            var freeRefs = fun1((f: Int => String) => 42).freeRefs
-            assert(freeRefs == noRefs)
-            // TODO(med-prio) figure out why the following doesn't compile
-            // assert(fun1((f: Int => String) => 42).freeRefs.isEmpty)
+          "higher-order fun" -{
+            "as param" - {
+              val freeRefs = fun1((f: Int => String) => 42).freeRefs
+              assert(freeRefs == noRefs)
+              // TODO(med-prio) figure out why the following doesn't compile
+              // assert(fun1((f: Int => String) => 42).freeRefs.isEmpty)
+            }
+            "returned" - {
+              val freeRefs = fun1((u: Unit) => {
+                (x: Int) => x
+              }).freeRefs
+              assert(freeRefs == noRefs)
+            }
           }
 
           "placeholder param" - {
