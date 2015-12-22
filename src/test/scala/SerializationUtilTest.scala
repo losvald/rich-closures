@@ -89,9 +89,21 @@ object SerializationUtilTest extends TestBase {
             assert(freeRefs == noRefs)
           }
 
-          "from global method" - {
-            val freeRefs = fun1(plus42).freeRefs
-            assert(freeRefs == noRefs)
+          "def" - {
+            "no param" - {
+              val freeRefs = fun1((ignored: Unit) => {
+                def f = 42
+                f
+              }).freeRefs
+              assert(freeRefs == noRefs)
+            }
+            "with params" - {
+              val freeRefs = fun1((ignored: Unit) => {
+                def second(unused: Boolean, used: Boolean) = used
+                second(true, true)
+              }).freeRefs
+              assert(freeRefs == noRefs)
+            }
           }
 
           "from higher-order method" - {
