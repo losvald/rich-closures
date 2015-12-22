@@ -281,7 +281,7 @@ object SerializationUtilTest extends TestBase {
               val f1 = fun1((x: Int) => {
                 val inner = {
                   val s = "in"
-                  "inner"
+                  s + "ner"
                 }
                 s + ", not " + inner
               })
