@@ -361,12 +361,12 @@ object SerializationUtilTest extends TestBase {
               }
             }
 
-            // "def" - { // TODO(med-prio) fails with BF finder
-            //   def triple(x: Int) = x * 3
-            //   val actFreeRefs = fun1((x: Int) => x + fOfOne(triple)).freeRefs
-            //   val expFreeRefs = mkFreeRefs(triple _)
-            //   assert(actFreeRefs == expFreeRefs)
-            // }
+            "def" - { // TODO(med-prio) fails with BF finder
+              def triple(x: Int) = x * 3
+              val actFreeRefs = fun1((x: Int) => x + fOfOne(triple)).freeRefs
+              val expFreeRefs = mkFreeRefs(triple _)
+              assert(actFreeRefs == expFreeRefs)
+            }
           }
 
           "param of enclosing" - {
