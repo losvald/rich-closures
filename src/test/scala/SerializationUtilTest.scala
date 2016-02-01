@@ -51,6 +51,13 @@ object SerializationUtilTest extends TestBase {
     def fOfOne(f: Int => Int): Int = f(1)
   }
 
+  class Clazz {
+    val v0 = 12
+    val v1 = 34
+    val v1GetterFunction = () => v1
+    def v1GetterMethod = v1
+  }
+
   val tests = TestSuite {
     import SerializationUtil._
     import TestOnly._
@@ -476,6 +483,33 @@ object SerializationUtilTest extends TestBase {
                 }
               }
             }
+          }
+        }
+
+        "class" - {
+          val c = new Clazz
+
+          "this" - {
+            val freeRefs = fun1((u: Unit) => {
+              val c2 = c
+              c2 eq c
+            }).freeRefs
+            assert(freeRefs == mkFreeRefs(c))
+          }
+
+          "val" - {
+            val freeRefs = fun1((u: Unit) => c.v1).freeRefs
+            assert(freeRefs == mkFreeRefs(c))
+          }
+
+          "function" - {
+            val freeRefs = fun1((u: Unit) => c.v1GetterFunction()).freeRefs
+            assert(freeRefs == mkFreeRefs(c))
+          }
+
+          "method" - {
+            val freeRefs = fun1((u: Unit) => c.v1GetterMethod).freeRefs
+            assert(freeRefs == mkFreeRefs(c))
           }
         }
       }
