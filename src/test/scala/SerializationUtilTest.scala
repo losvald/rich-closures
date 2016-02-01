@@ -451,6 +451,31 @@ object SerializationUtilTest extends TestBase {
             //   val freeRefs = fun1(add42AndY).freeRefs
             //   assert(freeRefs == mkFreeRefs(add42AndY _, gConst42, y))
             // }
+
+            "from pkgobj" - {
+              "import outside" - {
+                import pkgobj._
+                val freeRefs = fun1((u: Unit) => gFoo).freeRefs
+                assert(freeRefs == mkFreeRefs(gFoo))
+              }
+
+              "import inside" - {
+                "wildcard" - {
+                  val freeRefs = fun1((u: Unit) => {
+                    import pkgobj._
+                    gFoo
+                  }).freeRefs
+                  assert(freeRefs == mkFreeRefs(pkgobj.gFoo))
+                }
+                "specific" - {
+                  val freeRefs = fun1((u: Unit) => {
+                    import pkgobj.gFoo
+                    gFoo
+                  }).freeRefs
+                  assert(freeRefs == mkFreeRefs(pkgobj.gFoo))
+                }
+              }
+            }
           }
         }
       }
