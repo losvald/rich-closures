@@ -22,6 +22,7 @@ object SerializationUtil {
   trait RichClosure {
     type Function
     val f: Function
+    val freeRefNames: List[String]
     val freeRefVals: List[Any]
   }
 
@@ -58,7 +59,7 @@ object SerializationUtil {
     // TODO(hi-prio) if we store trees / symbols from blackbox.Universe#Context,
     // would it be possible to extract anything from them in a whitebox context?
     // q"""$rc.freeSyms.map(_.fullName)"""
-    q"$rc.freeRefVals"
+    q"$rc.freeRefNames"
   }
 
   def fun0[R](body: => R): () => R = macro fun0Impl[R]
@@ -82,30 +83,29 @@ object SerializationUtil {
       pretty(any(f.tree)) + "\n" +
       "raw: " + showRaw(f))
 
-    lazy val freeSyms = findFreeRefs(c)(f.tree)
-    lazy val freeRefs = freeSyms.map(_.fullName)
-    lazy val freeRefsBF = FreeVarsBruteForceFinder.locals(c)(f.tree).map {
+    lazy val freeSymTrees = findFreeRefs(c)(f.tree)
+    lazy val freeRefNames = freeSymTrees.map(_.symbol.fullName)
+    lazy val freeRefsNamesBF = FreeVarsBruteForceFinder.locals(c)(f.tree).map {
       _._1.symbol.fullName
     }
 
     val (tpeT, tpeR) = (c.weakTypeOf[T], c.weakTypeOf[R])
+    val freeTrees = freeSymTrees.asInstanceOf[List[Tree]]
     c.Expr[c.prefix.value.RichClosure1[T, R]](q"""
       new RichClosure1[$tpeT, $tpeR] {
         override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
-        override val freeRefVals = $freeRefs
+        override val freeRefNames = $freeRefNames
+        override val freeRefVals = $freeTrees
       }""")
   }
 
-  def findFreeRefs(c: Context)(
-    tree: c.universe.Tree
-  ): List[c.universe.Symbol] = {
+  def findFreeRefs(c: Context)(tree: c.universe.Tree) = {
     import c.universe._
-    // def isFree(sym: TermSymbol) = sym.isInstanceOf[FreeTermSymbolApi]
 
     val defSymSet = Set(findDefs(c)(tree): _*)
     debugln(s"bound: ${defSymSet}")
-    val freeSyms = tree.collect {
+    tree.collect[SymTreeApi] {
       // TODO(lo-prio) see if some cases can be consolidated as follows:
       // 1) Collect (term) symbols from RefTree other than SelectFromTypeTree
       // 2) case ref @ RefTree(qual, _) if ref.isTerm && ... => ...
@@ -113,28 +113,26 @@ object SerializationUtil {
           if ident.isTerm && !ident.symbol.isModule &&
           name != termNames.WILDCARD =>
         debugln(s"ID'FIER: ${showRaw(ident)} #${ident##}")
-        ident.symbol.asTerm
+        ident
       case select @ Select(qual, TermName(name))
           if select.isTerm && select.symbol.asTerm.isStable &&
           select.symbol.asTerm.isStatic && // TODO(med-prio) too conservative?
           !select.symbol.isModule =>
-        val sym = select.symbol.asTerm
+        val sym = select.symbol
         debugln(s"SEL: ${showRaw(select)} name=$name meth=${sym.isMethod}")
-        sym
-      case select @ Select(ref @ (This(_) | Super(_)), _)
+        select
+      case select @ Select(ref @ This(_), _)
           if select.isTerm && select.symbol.isStatic &&
           !select.symbol.asTerm.isStable =>
-        val sym = select.symbol.asTerm
         debugln(s"unstable static: ${showRaw(select)}")
-        ref.symbol
-    } filter { s =>
+        ref
+    } filter { t =>
+      val s = t.symbol
       // Note: we cannot filter out if s.isMethod == true because member val
       // have explicit setters or getters
       !(s.isPackage /* || TODO(high-prio) add more isXYZ? */) &&
       !defSymSet.contains(s) // exclude bound symbols
-    } toSet // groupBy { s => s } map { _._1 } toList
-
-    freeSyms.toList
+    } groupBy { s => s.symbol } map { _._2.head } toList
   }
 
   private def findDefs(c: Context)(tree: c.universe.Tree) = {
@@ -159,7 +157,7 @@ object SerializationUtil {
 
   object TestOnly {
     implicit class DebuggableRichClosure(rc: RichClosure) {
-      val freeRefs = rc.freeRefVals.asInstanceOf[List[String]].sorted
+      val freeRefs = rc.freeRefNames.sorted
     }
   }
 }
