@@ -44,7 +44,6 @@ object SerializationUtil {
       case Block(_, Function(_, Apply(ref @ RefTree(_, _), _))) if ref.isTerm =>
         ref.symbol.fullName
       case t =>
-        // val t = t.find { _ match { case Ident(
         c.abort(c.enclosingPosition, "not (selection of) ident.: " + showRaw(t))
     })
     q"""List(..$fullNames)"""
@@ -83,11 +82,8 @@ object SerializationUtil {
       pretty(any(f.tree)) + "\n" +
       "raw: " + showRaw(f))
 
-    lazy val freeSymTrees = findFreeRefs(c)(f.tree)
-    lazy val freeRefNames = freeSymTrees.map(_.symbol.fullName)
-    lazy val freeRefsNamesBF = FreeVarsBruteForceFinder.locals(c)(f.tree).map {
-      _._1.symbol.fullName
-    }
+    val freeSymTrees = findFreeRefs(c)(f.tree)
+    val freeRefNames = freeSymTrees.map(_.symbol.fullName)
 
     val (tpeT, tpeR) = (c.weakTypeOf[T], c.weakTypeOf[R])
     val freeTrees = freeSymTrees.asInstanceOf[List[Tree]]
@@ -96,7 +92,7 @@ object SerializationUtil {
         override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
         override val freeRefNames = $freeRefNames
-        override val freeRefVals = $freeTrees
+        override lazy val freeRefVals = $freeTrees
       }""")
   }
 
@@ -148,21 +144,9 @@ object SerializationUtil {
     }
   }
 
-  // private def findValDefs((implicit c: Context)
-
   private val isDebugEnabled = System.getProperty(
-    "cv.debug", "true").toBoolean // TODO(low-prio) change default to false
-  def debugln(msg: => String): Unit =
+    "SerializationUtil.debug", "false").toBoolean
+
+  private def debugln(msg: => String): Unit =
     if (isDebugEnabled) println(msg)
-
-  object TestOnly {
-    implicit class DebuggableRichClosure(rc: RichClosure) {
-      val (freeRefs, freeIdxs) = rc.freeRefNames.zipWithIndex.sorted.unzip
-
-      lazy val freeVals = {
-        val valSeq = rc.freeRefVals.toIndexedSeq
-        for (idx <- freeIdxs) yield valSeq(idx)
-      }
-    }
-  }
 }

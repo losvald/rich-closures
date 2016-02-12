@@ -60,7 +60,17 @@ object SerializationUtilTest extends TestBase {
 
   val tests = TestSuite {
     import SerializationUtil._
-    import TestOnly._
+
+    System.setProperty("SerializationUtil.debug", "true")
+
+    implicit class DebuggableRichClosure(rc: RichClosure) {
+      val (freeRefs, freeIdxs) = rc.freeRefNames.zipWithIndex.sorted.unzip
+
+      lazy val freeVals = {
+        val valSeq = rc.freeRefVals.toIndexedSeq
+        for (idx <- freeIdxs) yield valSeq(idx)
+      }
+    }
 
     "def macros" - {
       "fun0" - {
