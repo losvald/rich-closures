@@ -299,13 +299,11 @@ object SerializationUtilTest extends TestBase {
                   (neg: Boolean) => (if (neg) -1 else 1) * (two + snd._2)
                 }
               }
-              val (freeRefs, freeVals) = (
-                rc.freeRefs.asInstanceOf[List[String]].sorted,
-                rc.freeRefVals)
+              val (freeRefs, freeVals) = (rc.freeRefs, rc.freeVals)
               assert(freeRefs == mkFreeRefsUnsafe(
                 s"${testSuiteName}.snd",
                 s"${testSuiteName}.two"))
-              assert(freeVals == List(2, (10, 20)))
+              assert(freeVals == List((10, 20), 2))
             }
           }
 
@@ -511,7 +509,7 @@ object SerializationUtilTest extends TestBase {
             val rc = fun1((u: Unit) => c.v1GetterFunction())
             val (freeRefs, freeVals) = (rc.freeRefNames, rc.freeRefVals)
             assert(freeRefs == mkFreeRefs(c))
-            // assert(freeVals.head.asInstanceOf[Clazz] eq c) // FIXME(hi-prio)
+            assert(freeVals.head.asInstanceOf[Clazz] eq c)
           }
 
           "method" - {

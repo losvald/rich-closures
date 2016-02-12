@@ -157,7 +157,12 @@ object SerializationUtil {
 
   object TestOnly {
     implicit class DebuggableRichClosure(rc: RichClosure) {
-      val freeRefs = rc.freeRefNames.sorted
+      val (freeRefs, freeIdxs) = rc.freeRefNames.zipWithIndex.sorted.unzip
+
+      lazy val freeVals = {
+        val valSeq = rc.freeRefVals.toIndexedSeq
+        for (idx <- freeIdxs) yield valSeq(idx)
+      }
     }
   }
 }
