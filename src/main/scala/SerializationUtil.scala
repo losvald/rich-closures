@@ -101,7 +101,7 @@ object SerializationUtil {
 
     val defSymSet = Set(findDefs(c)(tree): _*)
     debugln(s"bound: ${defSymSet}")
-    tree.collect[SymTreeApi] {
+    (tree.collect[SymTreeApi] {
       // TODO(lo-prio) see if some cases can be consolidated as follows:
       // 1) Collect (term) symbols from RefTree other than SelectFromTypeTree
       // 2) case ref @ RefTree(qual, _) if ref.isTerm && ... => ...
@@ -128,7 +128,9 @@ object SerializationUtil {
       // have explicit setters or getters
       !(s.isPackage /* || TODO(high-prio) add more isXYZ? */) &&
       !defSymSet.contains(s) // exclude bound symbols
-    } groupBy { s => s.symbol } map { _._2.head } toList
+    } groupBy { s => s.symbol } map { _._2.head } toList) sortBy {
+      _.symbol.fullName // make deterministic by sorting
+    }
   }
 
   private def findDefs(c: Context)(tree: c.universe.Tree) = {
