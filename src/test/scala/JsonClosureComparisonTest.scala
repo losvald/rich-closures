@@ -39,7 +39,7 @@ object JsonClosureComparisonTest extends TestSuite { self =>
   case class IntStr(i: Int, s: String)
   case class Nested(is: IntStr)
 
-  class IntAndSelfFieldClass {
+  class IntAndSelfFieldClass(val z: Int = 11) {
     val x = 42
     val self = this
   }
@@ -101,8 +101,8 @@ object JsonClosureComparisonTest extends TestSuite { self =>
 
       "circular ref" - {
         val circ = new IntAndSelfFieldClass
-        { // FIXME(scala-pickling): it serializes *nothing* without this,
-          val y = 11 // but this field is not even serialized! Double-bug?
+        { // TODO(scala-pickling): it serializes only $type and z without this?
+          val y = 11 // this field is not serialized (that explains that above)
         }
         val freeVals = fun1 { (a0: Unit) => circ.x } freeRefVals
         val expected = (
@@ -112,19 +112,104 @@ object JsonClosureComparisonTest extends TestSuite { self =>
                 ("self" ->
                   ("$ref" -> 0) // object identity info
                 ) ~
-                ("x" -> 42))) ~
-            ("x" -> 42))
+                ("x" -> 42) ~ ("z" -> 11))) ~
+            ("x" -> 42) ~ ("z" -> 11))
 
         val actual = parse(freeVals.head.pickle.value)
-        val diff = expected diff actual
+        val Diff(changes, adds, dels) = expected diff actual
 
-        "no missing or extra" - {
-          assert(diff.added == JNothing, diff.deleted == JNothing)
+        "no changes" - { assert(changes == JNothing) }
+        "no missing" - { assert(adds == JNothing) }
+        "no extra" - { assert(dels == JNothing) }
+      }
+
+
+      case class IntStrOpt(n: Int, so: Option[String])
+      val iso1 = new IntStrOpt(42, Some("foo"))
+      val iso2 = new IntStrOpt(42, Some("foo"))
+      case class IntStrOptPair(val _1: IntStrOpt, val _2: IntStrOpt)
+
+      "object identity" - {
+        "different" - {
+          val diffStr: String = (
+            ("$type" -> "IntStrOptPair") ~
+              ("_1" ->
+                ("n" -> 42) ~
+                ("so" ->
+                  ("$type" -> "scala.Some[java.lang.String]") ~
+                  ("x" -> "foo"))) ~
+              ("_2" ->
+                ("n" -> 42) ~
+                ("so" ->
+                  ("$type" -> "scala.Some[java.lang.String]") ~
+                  ("x" -> "foo")))
+          ) diff parse(new IntStrOptPair(iso1, iso2).pickle.value)
+          assert(diffStr.isEmpty)
         }
 
-        "no changed" - {
-          val changed = diff.changed
-          assert(changed == JNothing)
+        "same" - {
+          val diffStr: String = (
+            ("$type" -> "IntStrOptPair") ~
+              ("_1" ->
+                ("n" -> 42) ~
+                ("so" ->
+                  ("$type" -> "scala.Some[java.lang.String]") ~
+                  ("x" -> "foo"))) ~
+              ("_2" -> ("$ref" -> 1))
+          ) diff parse(new IntStrOptPair(iso1, iso1).pickle.value)
+          assert(diffStr.isEmpty)
+
+        }
+      }
+
+      "linked list" - {
+        class IntStrOptNode(val v: IntStrOpt, var next: IntStrOptNode)
+
+        "non-circular" - {
+          val n = new IntStrOptNode(iso1, null)
+          val n2 = new IntStrOptNode(iso2, n)
+
+          val diffStr: String = (
+            ("$type" -> "IntStrOptNode") ~
+              ("v" ->
+                ("n" -> 42) ~
+                ("so" ->
+                  ("$type" -> "scala.Some[java.lang.String]") ~
+                  ("x" -> "foo"))
+              ) ~
+              ("next" ->
+                ("v" ->
+                  ("n" -> 42) ~
+                  ("so" ->
+                    ("$type" -> "scala.Some[java.lang.String]") ~
+                    ("x" -> "foo"))) ~
+                ("next" -> JNull))
+          ) diff parse(n2.pickle.value)
+          assert(diffStr.isEmpty)
+        }
+
+        "circular" - {
+          val n = new IntStrOptNode(iso1, null)
+          val n2 = new IntStrOptNode(iso2, n)
+          n.next = n2
+
+          val diffStr: String = (
+            ("$type" -> "IntStrOptNode") ~
+              ("v" ->
+                ("n" -> 42) ~
+                ("so" ->
+                  ("$type" -> "scala.Some[java.lang.String]") ~
+                  ("x" -> "foo"))
+              ) ~
+              ("next" ->
+                ("v" ->
+                  ("n" -> 42) ~
+                  ("so" ->
+                    ("$type" -> "scala.Some[java.lang.String]") ~
+                    ("x" -> "foo"))) ~
+                ("next" -> ("$ref" -> 0)))
+          ) diff parse(n2.pickle.value)
+          assert(diffStr.isEmpty)
         }
       }
     }
