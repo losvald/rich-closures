@@ -54,11 +54,25 @@ object JsonClosureComparisonTest extends TestSuite { self =>
       val one = 1
 
       "singleton" - {
-        val freeVals = fun1 { (s: String) => List(one, s) } freeRefVals
+        val rc1 = fun1 { (s: String) => List(one, s) }
+        val freeVals = rc1.freeRefVals
 
         assert(freeVals.size == 1) // sanity check
         val actual = "\\s+".r replaceAllIn(freeVals.head.pickle.value, "")
         assert(actual == """{"$type":"scala.Int","value":1}""")
+
+        "rich closure" - {
+          val actual = parse(rc1.toJson)
+          assert(actual.toString.indexOf("$anonfun$") >= 0)
+
+          val diffStr: String = (
+            ("$type" -> "scala.Array[scala.Any]") ~
+              ("elems" -> JArray(List(
+                parse(rc1.f.pickle.value),
+                parse(one.pickle.value))))
+          ) diff actual
+          assert(diffStr.isEmpty)
+        }
       }
 
       "int and string" - {

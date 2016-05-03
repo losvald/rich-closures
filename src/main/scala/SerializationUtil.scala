@@ -18,21 +18,30 @@ import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
 import scala.reflect.macros.whitebox.{Context => WContext}
 
+import scala.pickling.Defaults._, scala.pickling.json._
+
 object SerializationUtil {
   trait RichClosure {
-    type Function
-    val f: Function
     val freeRefNames: List[String]
     val freeRefVals: List[Any]
+
+    // XXX(med-prio): workaround for pickle (cannot serialize abstract type?)
+    // For now, duplicate pickling in each subtype RichClosureN
+    // type Function
+    // val f: Function
+    // def toJson: String = f.pickle.value // Error: Cannot generate a pickler
+    def toJson: String
   }
 
-  // case class RichClosure1[-T, +R](
-  //   val f: ???, // TODO(med-prio) how to let f have type <: Function1[T, R]?
-  //   val freeRefVals: List[Any])
   trait RichClosure1[-T, +R]
+  // ( // FIXME(scala): compiler crash if uncommented and turned into case class
+  //   val f: (T => R),
+  //   val freeRefNames: List[String])
+  // Instead, fun1 macro instantiates a subtype and abstract members
       extends (T => R) with RichClosure {
-    type Function <: Function1[T, R]
+    val f: (T => R)
     override def apply(x: T): R = f.apply(x)
+    def toJson: String = (f :: freeRefVals).toArray.pickle.value
   }
 
   def mkFreeRefs(ts: Any*): List[String] = macro mkFreeRefsImpl
@@ -89,7 +98,6 @@ object SerializationUtil {
     val freeTrees = freeSymTrees.asInstanceOf[List[Tree]]
     c.Expr[c.prefix.value.RichClosure1[T, R]](q"""
       new RichClosure1[$tpeT, $tpeR] {
-        override type Function = Function1[$tpeT, $tpeR]
         override val f = $f
         override val freeRefNames = $freeRefNames
         override lazy val freeRefVals = $freeTrees
